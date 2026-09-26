@@ -30,3 +30,22 @@ Pair-wise GSB 标注任务仓库（第 14 批 / 199）。
 1. 在本仓库中完成提示词要求的全部内容。
 2. `./mvnw -q verify` 必须通过。
 3. 完成后在所属分支（A 或 B）上提交，产物快照的父提交必须是初始环境快照。
+
+## 实现说明
+
+核心类位于 `com.example.gsb.quota` 包：
+
+- `FairQuotaAllocator`：多租户配额公平分配器（线程安全）。
+  - `registerTenant(id, minGuarantee, maxLimit)`：注册租户，保障额度之和不得超过全局额度。
+  - `tryAcquire(id, amount)`：申请额度，返回实际获得量。保障额度内永远足额满足
+    （必要时按需、逐步从借用方收回，优先收回借用最多者）；超出保障的部分从共享池借用，
+    最多到租户上限。
+  - `release(id, amount)`：释放额度并返回实际释放量（借用额度可能已被收回，按实际钳制）。
+  - `isIdle(id)` / `idleTenants()`：闲置检测，超过 `idleTimeout` 无活动的租户，
+    其未用保障额度进入共享池。
+  - `tenantStats(id)` / `stats()`：各租户已用、保障内用量、借用、累计借用/收回，
+    以及全局剩余与共享池可用量。
+- `TenantStats` / `GlobalStats`：不可变统计快照。
+
+测试覆盖：保底分配、借用与逐步收回、闲置检测、高并发下保障不被侵占、统计准确性，
+见 `src/test/java/com/example/gsb/quota/`。
